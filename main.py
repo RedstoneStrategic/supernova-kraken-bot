@@ -321,4 +321,108 @@ class Bot:
             "qty": qty,
             "pnl": pnl
         })
-        self.store.data["open_trades"] = [x for x in self.store.data["open_trades"] if x.get("id")_]()]()_]()
+        self.store.data["open_trades"] = [x for x in self.store.data["open_trades"] if x.get("id") != tr.get("id")]
+        if self.cfg.get("paper", False):
+            self.store.data["equity_base"] = self.store.data.get("equity_base", 100.0) + pnl
+        self.store.save()
+        print(ts(), f"Closed {symbol} PnL {pnl:.4f} USDT")
+
+    def can_open_more(self):
+        return len(self.store.open_trades()) < self.max_positions
+
+    def open_trade(self, symbol, price, stop_pct):
+        equity = self.equity_usdt()
+        qty = calc_qty(equity, price, stop_pct, self.cfg["risk_per_trade_pct"])
+        if price*qty < self.broker.min_order_usd:
+            print(ts(), f"Skip {symbol}: size too small ({price*qty:.2f} USD)")
+            return
+        try:
+            side = "buy"
+            self.broker.create_market_order(symbol, side, qty)
+            rec = {
+                "id": f"{symbol}_{int(time.time()*1000)}",
+                "time": ts(),
+                "symbol": symbol,
+                "side": side,
+                "qty": qty,
+                "entry_price": price,
+                "stop_price": price*(1 - stop_pct/100.0),
+                "max_price": price,
+                "min_price": price
+            }
+            self.store.data["open_trades"].append(rec)
+            self.store.save()
+            print(ts(), f"Opened {symbol} qty={qty:.6f} at {price:.6f}")
+        except Exception as e:
+            print(ts(), "open_trade error", e)
+
+    def run_once(self):
+        if not self.daily_guard():
+            time.sleep(self.loop_seconds)
+            return
+
+        try:
+            self.manage_open_trades()
+        except Exception as e:
+            print(ts(), "manage_open_trades error", e)
+
+        if not self.can_open_more():
+            time.sleep(self.loop_seconds)
+            return
+
+        for symbol in self.cfg["coins"]:
+            if not self.can_open_more():
+                break
+            try:
+                ohlcv1 = self.broker.fetch_ohlcv(symbol, "1m", 250)
+                ohlcv5 = self.broker.fetch_ohlcv_tf(symbol, "5m", 250)
+            except Exception as e:
+                print(ts(), f"{symbol} fetch ohlcv error {e}")
+                continue
+
+            df1 = build_df(ohlcv1)
+            df5 = build_df(ohlcv5)
+            price = float(df1["close"].iloc[-1])
+
+            a = float(atr(df1["high"], df1["low"], df1["close"]).iloc[-1])
+            a_bps = atr_bps(a, price)
+            low_bps, high_bps = self.cfg["atr_vol_gate_bps"]
+            if a_bps < low_bps or a_bps > high_bps:
+                continue
+
+            tkr = self.broker.ticker(symbol)
+            sp_bps = spread_bps(tkr.get("ask", price), tkr.get("bid", price))
+            if sp_bps < self.cfg.get("min_spread_bps", 0) or sp_bps > self.cfg.get("max_spread_bps", 10):
+                continue
+
+            sig = choose_entry(df1, df5)
+            if not sig:
+                continue
+
+            if not self.can_open_more():
+                break
+
+            stop_pct = self.cfg["stop_pct_default"]
+            atrp = a_bps/100.0  # percent
+            stop_pct = max(stop_pct, atrp * self.cfg.get("atr_mult_stop", 1.5))
+
+            self.open_trade(symbol, price, stop_pct)
+
+        time.sleep(self.loop_seconds)
+
+    def run(self):
+        print(ts(), "SUPERNOVA Kraken Scalper starting...")
+        print(ts(), f"Paper mode: {self.cfg.get('paper', False)}  Max positions: {self.max_positions}")
+        while True:
+            try:
+                self.run_once()
+            except KeyboardInterrupt:
+                print("Stopping...")
+                break
+            except Exception as e:
+                print(ts(), "Top-level error:", e)
+                traceback.print_exc()
+                time.sleep(2)
+
+if __name__ == "__main__":
+    Bot("config.json").run()
