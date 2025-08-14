@@ -1,0 +1,39 @@
+{
+  "exchange": "kraken",
+  "account_currency": "USDT",
+  "coins": [
+    "SOL/USDT",
+    "ADA/USDT",
+    "XRP/USDT",
+    "MATIC/USDT",
+    "OP/USDT",
+    "LINK/USDT",
+    "ARB/USDT",
+    "DOGE/USDT",
+    "ATOM/USDT",
+    "AVAX/USDT"
+  ],
+  "risk_per_trade_pct": 0.75,
+  "max_positions": 3,
+  "daily_dd_halt_pct": 2.5,
+  "target_pct": 0.9,
+  "trail_start_pct": 0.6,
+  "trail_gap_pct": 0.3,
+  "stop_pct_default": 0.7,
+  "atr_mult_stop": 1.8,
+  "min_spread_bps": 0,
+  "max_spread_bps": 8,
+  "atr_vol_gate_bps": [5, 70],
+  "loss_streak_cooldown": { "count": 3, "minutes": 60 },
+  "loop_seconds": 5,
+  "session_block_utc": ["00:00-00:59"],
+  "profit_stash_steps": [
+    { "equity": 150, "stash": 50 },
+    { "equity": 200, "stash": 50 },
+    { "equity": 300, "stash": 75 },
+    { "equity": 500, "stash": 100 },
+    { "equity": 750, "stash": 150 },
+    { "equity": 1000, "stash": 250 }
+  ],
+  "paper": false
+}
